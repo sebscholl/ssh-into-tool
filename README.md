@@ -26,7 +26,7 @@ curl -sSL https://raw.githubusercontent.com/sebscholl/ssh-into-tool/refs/heads/m
 Option 2: Manual installation
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/ssh-into-tool.git
+git clone https://github.com/sebscholl/ssh-into-tool.git
 
 # Copy the script to a directory in your PATH
 sudo cp ssh-into-tool/ssh-into /usr/local/bin/
