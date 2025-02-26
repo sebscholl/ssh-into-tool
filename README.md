@@ -20,7 +20,7 @@ A simple command-line utility that makes SSH connections easier by managing a li
 
 Option 1: Using the install script
 ```bash
-curl -sSL https://raw.githubusercontent.com/sebscholl/ssh-into-tool/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/sebscholl/ssh-into-tool/refs/heads/main/install.sh | bash
 ```
 
 Option 2: Manual installation
