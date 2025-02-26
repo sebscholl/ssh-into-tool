@@ -1,0 +1,199 @@
+#!/bin/bash
+
+# Configuration file path
+CONFIG_FILE="$HOME/.ssh/servers.txt"
+
+# Function to display usage information
+show_usage() {
+    echo "Usage: ssh-into [OPTION]"
+    echo "Interactive SSH connection utility"
+    echo ""
+    echo "Options:"
+    echo "  -a, --add NAME IP     Add a new server (IP format: username@ip)"
+    echo "  -e, --edit OLD_NAME NEW_NAME    Edit a server name"
+    echo "  -r, --remove NAME     Remove a server by name"
+    echo "  -l, --list            List all saved servers"
+    echo "  -h, --help            Display this help message"
+    echo ""
+    echo "Examples:"
+    echo "  ssh-into                    Launch interactive server selection"
+    echo "  ssh-into -a webserver john@192.168.1.10   Add a new server"
+    echo "  ssh-into -e webserver web-prod   Rename 'webserver' to 'web-prod'"
+    echo "  ssh-into -r webserver       Remove the webserver entry"
+}
+
+# Function to ensure config file exists
+ensure_config_exists() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        mkdir -p "$(dirname "$CONFIG_FILE")"
+        touch "$CONFIG_FILE"
+        echo "# Server list format: NAME USERNAME@IP" > "$CONFIG_FILE"
+        echo "# Example: webserver john@192.168.1.10" >> "$CONFIG_FILE"
+    fi
+}
+
+# Function to add a new server
+add_server() {
+    local name="$1"
+    local ip="$2"
+    
+    # Validate inputs
+    if [ -z "$name" ] || [ -z "$ip" ]; then
+        echo "Error: Both name and IP are required"
+        show_usage
+        exit 1
+    fi
+    
+    # Check if IP is in the correct format (username@ip)
+    if ! echo "$ip" | grep -q "@"; then
+        echo "Error: IP should be in the format username@ip"
+        exit 1
+    fi
+    
+    # Remove existing entry with the same name if it exists
+    sed -i "/^$name /d" "$CONFIG_FILE" 2>/dev/null || true
+    
+    # Add the new entry
+    echo "$name $ip" >> "$CONFIG_FILE"
+    echo "Server '$name' added successfully."
+}
+
+# Function to edit a server name
+edit_server_name() {
+    local old_name="$1"
+    local new_name="$2"
+    
+    # Validate inputs
+    if [ -z "$old_name" ] || [ -z "$new_name" ]; then
+        echo "Error: Both old and new names are required"
+        show_usage
+        exit 1
+    fi
+    
+    # Check if the server exists
+    if ! grep -q "^$old_name " "$CONFIG_FILE"; then
+        echo "Error: Server '$old_name' not found"
+        exit 1
+    fi
+    
+    # Check if the new name already exists
+    if grep -q "^$new_name " "$CONFIG_FILE"; then
+        echo "Error: Server name '$new_name' already exists"
+        exit 1
+    fi
+    
+    # Get the IP address
+    local ip=$(grep "^$old_name " "$CONFIG_FILE" | cut -d ' ' -f 2)
+    
+    # Replace the entry
+    sed -i "s/^$old_name $ip/$new_name $ip/" "$CONFIG_FILE"
+    echo "Server renamed from '$old_name' to '$new_name' successfully."
+}
+
+# Function to remove a server
+remove_server() {
+    local name="$1"
+    
+    # Validate input
+    if [ -z "$name" ]; then
+        echo "Error: Server name is required"
+        show_usage
+        exit 1
+    fi
+    
+    # Check if the server exists
+    if ! grep -q "^$name " "$CONFIG_FILE"; then
+        echo "Error: Server '$name' not found"
+        exit 1
+    fi
+    
+    # Remove the entry
+    sed -i "/^$name /d" "$CONFIG_FILE"
+    echo "Server '$name' removed successfully."
+}
+
+# Function to list all servers
+list_servers() {
+    echo "Available servers:"
+    echo "------------------"
+    grep -v "^#" "$CONFIG_FILE" | sort | while read -r line; do
+        if [ -n "$line" ]; then
+            name=$(echo "$line" | cut -d ' ' -f 1)
+            ip=$(echo "$line" | cut -d ' ' -f 2)
+            echo "  $name - $ip"
+        fi
+    done
+}
+
+# Function to connect to a selected server
+connect_to_server() {
+    local servers=()
+    local ips=()
+    
+    # Read servers from config file
+    while read -r line; do
+        if [[ ! "$line" =~ ^# && -n "$line" ]]; then
+            name=$(echo "$line" | cut -d ' ' -f 1)
+            ip=$(echo "$line" | cut -d ' ' -f 2)
+            servers+=("$name")
+            ips+=("$ip")
+        fi
+    done < "$CONFIG_FILE"
+    
+    # Check if any servers are defined
+    if [ ${#servers[@]} -eq 0 ]; then
+        echo "No servers defined. Use 'ssh-into -a NAME IP' to add a server."
+        exit 1
+    fi
+    
+    # Display server list with numbers
+    echo "Select a server to connect to:"
+    for i in "${!servers[@]}"; do
+        echo "  $((i+1)). ${servers[$i]} - ${ips[$i]}"
+    done
+    
+    # Get user selection
+    read -p "Enter selection (1-${#servers[@]}): " selection
+    
+    # Validate selection
+    if ! [[ "$selection" =~ ^[0-9]+$ ]] || [ "$selection" -lt 1 ] || [ "$selection" -gt "${#servers[@]}" ]; then
+        echo "Invalid selection"
+        exit 1
+    fi
+    
+    # Connect to the selected server
+    selected_ip="${ips[$((selection-1))]}"
+    echo "Connecting to ${servers[$((selection-1))]} ($selected_ip)..."
+    ssh "$selected_ip"
+}
+
+# Main script execution
+ensure_config_exists
+
+# Parse command-line arguments
+if [ $# -eq 0 ]; then
+    connect_to_server
+else
+    case "$1" in
+        -a|--add)
+            add_server "$2" "$3"
+            ;;
+        -e|--edit)
+            edit_server_name "$2" "$3"
+            ;;
+        -r|--remove)
+            remove_server "$2"
+            ;;
+        -l|--list)
+            list_servers
+            ;;
+        -h|--help)
+            show_usage
+            ;;
+        *)
+            echo "Unknown option: $1"
+            show_usage
+            exit 1
+            ;;
+    esac
+fi
